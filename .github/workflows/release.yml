@@ -1,7 +1,7 @@
 name: Release
 
-# Runs when the addon changes on main: a data update pushed by KeyStoneDataMiner, or a change of the code.
-# Tests first, then a new version is released as KeyStoneMaster-<version>.zip.
+# Runs when the addon changes on main: a data update pushed by KeyLootDataMiner, or a change of the code.
+# Tests first, then a new version is released as KeyLootMaster-<version>.zip.
 on:
   push:
     branches: [ "main" ]
@@ -37,14 +37,14 @@ jobs:
         run: |
           version="${{ steps.version.outputs.tag }}"
           sed -i "s/^## Version:.*/## Version: ${version#v}/" KeyLootMaster/KeyLootMaster.toc
-          zip -qr "KeyStoneMaster-${version}.zip" KeyLootMaster
+          zip -qr "KeyLootMaster-${version}.zip" KeyLootMaster
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           version="${{ steps.version.outputs.tag }}"
           data_date=$(grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}' KeyLootMaster/Data/Meta.lua | head -1)
-          gh release create "$version" "KeyStoneMaster-${version}.zip" \
+          gh release create "$version" "KeyLootMaster-${version}.zip" \
             --target "${{ github.sha }}" \
-            --title "KeyStoneMaster ${version#v}" \
+            --title "KeyLootMaster ${version#v}" \
             --notes "Data of ${data_date:-unknown}. Unzip into World of Warcraft/_retail_/Interface/AddOns (the folder inside is KeyLootMaster)."

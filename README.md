@@ -1,4 +1,4 @@
-# KeyStoneMaster
+# KeyLootMaster
 
 A World of Warcraft addon (Retail 12.x) that shows where the best gear of your class and specialization
 drops, for Mythic+ dungeons and the current raid. The data comes from what the best players actually wear.
@@ -29,14 +29,14 @@ Download the zip of the newest [release](../../releases/latest) and unzip it int
 
 ## Where the data comes from
 
-The data is not collected by the addon. [KeyStoneDataMiner](https://github.com/unrealshape/KeyStoneDataMiner)
+The data is not collected by the addon. [KeyLootDataMiner](https://github.com/unrealshape/KeyLootDataMiner)
 reads the Blizzard API and Warcraft Logs twice a week and writes the Lua files in `KeyLootMaster/Data/`
 into this repository.
 
 ## Releases
 
 Every change of the addon on `main` (a data update from the DataMiner or a code change) runs the tests and
-then publishes a new version, `vYYYY.MM.DD.<run>`, with `KeyStoneMaster-<version>.zip` attached
+then publishes a new version, `vYYYY.MM.DD.<run>`, with `KeyLootMaster-<version>.zip` attached
 (`.github/workflows/release.yml`).
 
 ## Develop
