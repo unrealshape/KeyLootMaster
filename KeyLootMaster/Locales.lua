@@ -44,6 +44,8 @@ local overrides = {
         ["Enchantments"] = "Verzauberungen",
         ["Gems"] = "Edelsteine",
         ["Gem sets"] = "Edelstein-Sets",
+        ["Shift-click links it in the chat."] = "Shift-Klick verlinkt es im Chat.",
+        ["A gem set is the mix of gem colors the top players wear. Each line is one mix and how many of them wear it. The You line compares your gems with the most common mix: +1 Red means you lack one red gem."] = "Ein Edelstein-Set ist die Mischung der Edelstein-Farben, die die Top-Spieler tragen. Jede Zeile ist eine Mischung und zeigt, wie viele von ihnen sie tragen. Die Zeile Du vergleicht deine Edelsteine mit der häufigsten Mischung: +1 Red heißt, dir fehlt ein roter Edelstein.",
         ["Embellishments"] = "Verzierungen",
         ["You"] = "Du",
         ["Meta"] = "Meta", ["Red"] = "Rot", ["Green"] = "Grün", ["Blue"] = "Blau", ["Purple"] = "Lila", ["Other"] = "Andere",

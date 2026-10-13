@@ -350,7 +350,25 @@ class SmokeTest(unittest.TestCase):
             self.assertEqual(len(self.rows()), 0)
             self.assertTrue(any(needle in s for s in self.shown_texts()), label)
             if label == "Gear":
-                self.assertTrue(any("1 Meta, 1 Red, 2 Green" in s for s in self.shown_texts()))
+                self.assertTrue(any("1x" in s and "Meta" in s and "2x" in s and "Green" in s and "42%" in s
+                                    for s in self.shown_texts()))
+
+    def test_gems_and_enchantments_link_like_items(self):
+        self.boot()
+        self.lua.execute(self.GEAR.replace('name = "Empowered Hex of Leeching", n = 42',
+                                           'name = "Empowered Hex of Leeching", item = 223456, n = 42'))
+        self.lua.execute("IsModifiedClick = function() return true end; "
+                         "ChatEdit_InsertLink = function(link) LINKED = link end")
+        self.open_window()
+        button = self.page_button("Gear")
+        button.scripts.OnClick(button)
+        buttons = [w for w in self.g.find_widgets("Button").values() if w.shown]
+        gem = next(w for w in buttons if w.itemId == 240898)
+        gem.scripts.OnClick(gem)
+        self.assertIn("item:240898", self.g.LINKED)
+        enchant = next(w for w in buttons if w.options is not None)
+        enchant.scripts.OnClick(enchant)
+        self.assertIn("item:223456", self.g.LINKED)
 
     def test_the_pages_say_so_when_there_is_no_data(self):
         self.boot()
