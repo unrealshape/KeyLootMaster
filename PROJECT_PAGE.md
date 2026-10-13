@@ -4,6 +4,7 @@ Name: KeyLootMaster
 Flavors: Retail
 Game versions: 12.1.0
 Categories: Addons, Boss Encounters, Bags & Inventory, Miscellaneous
+License: MIT
 
 The addon window itself is in English and German. The texts below are for the project page.
 

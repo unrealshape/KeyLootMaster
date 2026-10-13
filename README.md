@@ -48,3 +48,7 @@ python -m unittest discover -s tests -v
 
 The tests run the addon's Lua in a runtime against a stub of the game API, with the real data. The addon has
 not been verified in the game client itself yet.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
