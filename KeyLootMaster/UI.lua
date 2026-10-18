@@ -27,8 +27,9 @@ ns.SLOT_NAMES = SLOT_NAMES
 local frame, rows, alternatives, widgets = nil, {}, {}, {}
 local page = "items"
 local registered = {}
-local PAGE_ORDER = { "items", "stats", "gear", "talents", "players" }
-local PAGE_LABELS = { items = "Items", stats = "Stats", gear = "Gear", talents = "Talents", players = "Players" }
+local PAGE_ORDER = { "items", "stats", "gear", "talents", "players", "farming" }
+local PAGE_LABELS = { items = "Items", stats = "Stats", gear = "Gear", talents = "Talents", players = "Players",
+    farming = "Farming" }
 local stat = { main = {}, minor = {} }
 local shownKey, bisSet = nil, {}
 local TRACK_NAMES = { veteran = "Veteran", champion = "Champion", hero = "Hero", myth = "Myth" }
@@ -99,9 +100,14 @@ end
 
 local function hideTooltip() if GameTooltip then GameTooltip:Hide() end end
 
+--- Where an item comes from, as the shown list names it: the dungeon list names dungeons, the raid list bosses of
+--- the raid, Overall the most specific source. Pieces without an instance (Catalyst, crafted) name their kind.
 local function sourceText(id)
-    local text, more = ns.SourceLabel(id, ns.Settings().content == "raid" and "raid" or "dungeon")
-    if not text then return L["Other source"] end
+    local content = ns.Settings().content
+    local only = content == "raid" and "raid" or (content == "mplus" and "dungeon" or nil)
+    local best, more = ns.BestDrop(id, only)
+    if not best then return L["Other source"] end
+    local text = best.instance == 0 and L[best.instanceName] or ns.SourceLabel(id, only)
     if more > 0 then text = text .. " (+" .. more .. ")" end
     return text
 end
@@ -473,8 +479,8 @@ local function build()
 
     widgets.pageButtons = {}
     for index, name in ipairs(PAGE_ORDER) do
-        local tab = Skin.Tab(frame, L[PAGE_LABELS[name]], 84, 49)
-        tab:SetPoint("TOPLEFT", 200 + (index - 1) * 88, -1)
+        local tab = Skin.Tab(frame, L[PAGE_LABELS[name]], 80, 49)
+        tab:SetPoint("TOPLEFT", 200 + (index - 1) * 84, -1)
         tab:SetScript("OnClick", function() page = name; UI.Refresh() end)
         widgets.pageButtons[name] = tab
     end
@@ -489,22 +495,25 @@ local function build()
     widgets.spec, widgets.setSpecText = buildSpecPicker(frame)
     widgets.spec:SetPoint("TOPLEFT", 16, -62)
 
-    widgets.mplus = Skin.Button(frame, L["Mythic+"], 92, 28, "ghost")
-    widgets.mplus:SetPoint("LEFT", widgets.spec, "RIGHT", 14, 0)
+    widgets.overall = Skin.Button(frame, L["Overall"], 66, 28, "ghost")
+    widgets.overall:SetPoint("LEFT", widgets.spec, "RIGHT", 14, 0)
+    widgets.overall:SetScript("OnClick", function() ns.Settings().content = "overall"; UI.Refresh() end)
+    widgets.mplus = Skin.Button(frame, L["Mythic+"], 80, 28, "ghost")
+    widgets.mplus:SetPoint("LEFT", widgets.overall, "RIGHT", 4, 0)
     widgets.mplus:SetScript("OnClick", function() ns.Settings().content = "mplus"; UI.Refresh() end)
-    widgets.raid = Skin.Button(frame, L["Raid"], 72, 28, "ghost")
+    widgets.raid = Skin.Button(frame, L["Raid"], 60, 28, "ghost")
     widgets.raid:SetPoint("LEFT", widgets.mplus, "RIGHT", 4, 0)
     widgets.raid:SetScript("OnClick", function() ns.Settings().content = "raid"; UI.Refresh() end)
 
     local keyChoices = {}
     for _, level in ipairs(ns.KEY_LEVELS) do keyChoices[#keyChoices + 1] = { value = level, label = ns.KeyLabel(level) } end
-    widgets.key, widgets.setKeyText = makeChoice(frame, 140, keyChoices,
+    widgets.key, widgets.setKeyText = makeChoice(frame, 120, keyChoices,
         function() return ns.Settings().keyLevel end,
         function(value) ns.Settings().keyLevel = value; UI.Refresh() end)
     widgets.key:SetPoint("LEFT", widgets.raid, "RIGHT", 14, 0)
     widgets.vault = makeCheck(frame, L["Great Vault"], function(on) ns.Settings().vault = on; UI.Refresh() end)
     widgets.vault:SetPoint("LEFT", widgets.key, "RIGHT", 14, 0)
-    widgets.group, widgets.setGroupText = makeChoice(frame, 160, GROUP_CHOICES,
+    widgets.group, widgets.setGroupText = makeChoice(frame, 150, GROUP_CHOICES,
         function() return ns.Settings().group end,
         function(value) ns.Settings().group = value; UI.Refresh() end)
     widgets.group:SetPoint("TOPRIGHT", -16, -62)
@@ -624,20 +633,22 @@ function UI.Refresh()
     widgets.setSpecText(class and (ns.Title(class) .. " - " .. ns.Title(spec) .. (db.spec and "" or "  (you)")
         .. (otherClass and ("  +  " .. ns.Title(otherSpec)) or ""))
         or L["No data for this specialization."])
-    if db.content == "mplus" then
-        widgets.mplus:SetActive(true); widgets.raid:SetActive(false)
-    else
-        widgets.raid:SetActive(true); widgets.mplus:SetActive(false)
-    end
-    -- the item switches belong to the items page; the other pages keep the specialization and the player group
-    local onItems = page == "items"
-    widgets.mplus:SetShown(onItems)
-    widgets.raid:SetShown(onItems)
-    widgets.key:SetShown(onItems and db.content == "mplus")
-    widgets.vault:SetShown(onItems and db.content == "mplus")
+    -- the item switches belong to the items page (Overall) and the farming page (Mythic+ or Raid); the other pages
+    -- keep the specialization and the player group. The farming page has no Overall: it reads as Mythic+.
+    local onItems, onFarming = page == "items", page == "farming"
+    local view = db.content
+    if onFarming and view == "overall" then view = "mplus" end
+    widgets.overall:SetActive(view == "overall")
+    widgets.mplus:SetActive(view == "mplus")
+    widgets.raid:SetActive(view == "raid")
+    widgets.overall:SetShown(onItems)
+    widgets.mplus:SetShown(onItems or onFarming)
+    widgets.raid:SetShown(onItems or onFarming)
+    widgets.key:SetShown(onItems and view ~= "raid")
+    widgets.vault:SetShown(onItems and view ~= "raid")
     widgets.vault:SetChecked(db.vault)
     widgets.setKeyText(L["Key level"] .. ": " .. ns.KeyLabel(db.keyLevel))
-    local groups = class and db.content == "mplus" and ns.HasGroups(class, spec)
+    local groups = class and view == "mplus" and ns.HasGroups(class, spec)
     widgets.group:SetShown(groups and true or false)
     for _, choice in ipairs(GROUP_CHOICES) do
         if choice.value == db.group then widgets.setGroupText(L[choice.label]) end

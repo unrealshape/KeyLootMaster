@@ -225,20 +225,46 @@ class SmokeTest(unittest.TestCase):
         self.assertTrue(shown)
         self.assertTrue(shown <= wanted)
 
-    def test_the_two_buttons_list_the_dungeon_drops_and_the_raid_drops(self):
+    def test_the_buttons_list_dungeon_raid_or_everything_and_always_the_catalyst_and_crafted_pieces(self):
         ns = self.boot()
         self.open_window()
         self.assertGreater(len(self.rows()), 5)
         for row in self.rows():
-            self.assertTrue(ns.KindsOf(row.itemId).dungeon)
+            kinds = ns.KindsOf(row.itemId)
+            self.assertTrue(kinds.dungeon or kinds.catalyst or kinds.crafted)
+        self.assertTrue(any(ns.KindsOf(r.itemId).dungeon for r in self.rows()))
+        self.assertTrue(any(ns.KindsOf(r.itemId).catalyst for r in self.rows()))
+        self.assertTrue(any("Catalyst" in str(r.where.text) for r in self.rows()))
         self.content_button("Raid").scripts.OnClick(self.content_button("Raid"))
         self.assertEqual(self.g.KeyLootMasterDB.content, "raid")
         self.assertGreater(len(self.rows()), 5)
         for row in self.rows():
-            self.assertTrue(ns.KindsOf(row.itemId).raid)
+            kinds = ns.KindsOf(row.itemId)
+            self.assertTrue(kinds.raid or kinds.catalyst or kinds.crafted)
+        self.assertTrue(any(ns.KindsOf(r.itemId).raid for r in self.rows()))
+        self.content_button("Overall").scripts.OnClick(self.content_button("Overall"))
+        self.assertEqual(self.g.KeyLootMasterDB.content, "overall")
+        self.assertGreater(len(self.rows()), 5)
         self.content_button("Mythic+").scripts.OnClick(self.content_button("Mythic+"))
         self.assertEqual(self.g.KeyLootMasterDB.content, "mplus")
         self.assertGreater(len(self.rows()), 5)
+
+    def test_overall_lists_what_either_content_wants(self):
+        ns = self.boot()
+        rows = ns.Rows("paladin", "protection", "overall", None, None).values()
+        items = {e["item"] for r in rows for e in r["items"].values()}
+        self.assertTrue(any(ns.KindsOf(i).dungeon for i in items))
+        self.assertTrue(any(ns.KindsOf(i).raid and not ns.KindsOf(i).dungeon for i in items))
+        self.open_window()
+        self.content_button("Overall").scripts.OnClick(self.content_button("Overall"))
+        self.assertGreater(len(self.rows()), 5)
+        self.assertTrue(self.content_button("Overall").shown)
+
+    def test_a_saved_unknown_content_falls_back_to_mythic_plus(self):
+        self.boot()
+        self.g.KeyLootMasterDB.content = "weekly"
+        self.open_window()
+        self.assertEqual(self.g.KeyLootMasterDB.content, "mplus")
 
     def test_a_saved_source_filter_of_an_older_version_is_ignored(self):
         self.boot()
@@ -263,16 +289,21 @@ class SmokeTest(unittest.TestCase):
 
     def test_dungeon_items_show_what_the_chosen_key_level_rewards(self):
         ns = self.boot()
+
+        def dungeon_line():
+            row = next(r for r in self.rows() if ns.KindsOf(r.itemId).dungeon)
+            return str(row.where.text)
+
         self.open_window()
-        self.assertIn("292 Champion 1/6", str(self.rows()[0].where.text))
+        self.assertIn("292 Champion 1/6", dungeon_line())
         self.g.KeyLootMasterDB.keyLevel = 8
         self.g.SlashCmdList["KEYLOOTMASTER"]("")
         self.g.SlashCmdList["KEYLOOTMASTER"]("")
-        self.assertIn("308 Hero 2/6", str(self.rows()[0].where.text))
+        self.assertIn("308 Hero 2/6", dungeon_line())
         self.g.KeyLootMasterDB.vault = True
         self.g.SlashCmdList["KEYLOOTMASTER"]("")
         self.g.SlashCmdList["KEYLOOTMASTER"]("")
-        self.assertIn("315 Hero 4/6", str(self.rows()[0].where.text))
+        self.assertIn("315 Hero 4/6", dungeon_line())
 
     def test_the_key_levels_group_what_rewards_the_same(self):
         ns = self.boot()

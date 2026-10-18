@@ -6,14 +6,13 @@ local L = ns.L
 KeyLootMasterDB = KeyLootMasterDB or {}
 
 local DEFAULTS = {
-    content = "mplus",          -- "mplus" | "raid"
+    content = "mplus",          -- "overall" | "mplus" | "raid"
     source = nil,               -- a kind from ns.SOURCE_ORDER, or nil for all
     stats = "",                 -- letters of the secondary stats every item must carry
     missing = false,            -- hide what the player wears already
     spec = nil,                 -- a specialization id, or nil for the player's own
     compare = nil,              -- a second specialization id: the lists show only what both want
     tooltip = true,            -- the KeyLootMaster line in item tooltips
-    farmable = true,            -- only items that drop in the shown content (dungeon for Mythic+, raid for Raid)
     group = "dungeon",         -- the players the Mythic+ lists come from: "dungeon" (do dungeons) or "all" (every top player)
     keyLevel = 0,               -- the key level the item levels show (one of ns.KEY_LEVELS)
     vault = false,              -- show the Great Vault reward of that key level instead of the end of the dungeon
@@ -28,7 +27,7 @@ function ns.Settings()
     for key, value in pairs(DEFAULTS) do
         if db[key] == nil then db[key] = value end
     end
-    if db.content ~= "mplus" and db.content ~= "raid" then db.content = "mplus" end
+    if db.content ~= "overall" and db.content ~= "mplus" and db.content ~= "raid" then db.content = "mplus" end
     local known = false
     for _, level in ipairs(ns.KEY_LEVELS) do if level == db.keyLevel then known = true end end
     if not known then db.keyLevel = 0 end
@@ -38,7 +37,7 @@ function ns.Settings()
 end
 
 -- The settings that belong to one specialization (everything that filters the list).
-local PROFILE_KEYS = { "content", "source", "stats", "missing", "farmable", "keyLevel", "vault", "group" }
+local PROFILE_KEYS = { "content", "source", "stats", "missing", "keyLevel", "vault", "group" }
 
 --- Makes the filters those of a specialization ("paladin-holy"): the ones in use are put away for the
 --- specialization shown before, and the saved ones of this one are brought back. A specialization
@@ -165,11 +164,11 @@ function ns.OwnGemSignature()
     return any and signature or nil
 end
 
---- The filters as ns.Rows wants them: Mythic+ lists what drops in the dungeons, Raid what drops in the
---- raid. Everything else (Catalyst, crafted, other sources) can be obtained anyway and is not offered as a
---- filter; saved filter values of older versions are ignored.
+--- The filters as ns.Rows wants them: Mythic+ lists what drops in the dungeons, Raid what drops in the raid,
+--- both with the Catalyst and crafted pieces; Overall lists everything. Saved filter values of older versions
+--- are ignored.
 function ns.Filters()
-    return { farmable = ns.Settings().content == "mplus" and "dungeon" or "raid" }
+    return { kinds = ns.ViewKinds(ns.Settings().content) }
 end
 
 local function toggle()

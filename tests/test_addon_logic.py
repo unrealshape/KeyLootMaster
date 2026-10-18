@@ -116,6 +116,77 @@ class LogicTest(unittest.TestCase):
         self.assertEqual((text, more), ("Catalyst / tier", 0))
         self.assertEqual(tuple(self.call("SourceLabel", 102)), (None, 0))
 
+    def test_the_view_kinds_keep_what_can_be_got_in_that_view(self):
+        mplus = self.call("ViewKinds", "mplus")
+        self.assertTrue(mplus["dungeon"] and mplus["catalyst"] and mplus["crafted"])
+        self.assertIsNone(mplus["raid"])
+        raid = self.call("ViewKinds", "raid")
+        self.assertTrue(raid["raid"] and raid["catalyst"] and raid["crafted"])
+        self.assertIsNone(self.call("ViewKinds", "overall"))
+        rows = self.call("Rows", "paladin", "protection", "mplus", self.table(kinds=mplus), None)
+        # 100 is a tier piece, 101 drops in a dungeon: both stay; 102 has no known source: gone
+        self.assertEqual(self.items_of(rows, "head"), [100, 101])
+        # the raid-only trinket goes, the crafted one stays
+        self.assertEqual(self.items_of(rows, "trinket"), [201])
+        rows = self.call("Rows", "paladin", "protection", "raid", self.table(kinds=raid), None)
+        self.assertEqual(self.items_of(rows, "head"), [100])
+
+    def test_overall_merges_both_lists_weighted_by_their_players(self):
+        rows = self.call("Rows", "paladin", "protection", "overall", None, None)
+        head = next(r for r in rows.values() if r["slot"] == "head")["items"]
+        merged = {e["item"]: e for e in head.values()}
+        # 100: 45 of 50 dungeon players and 80 of 100 raiders = 125 of 150
+        self.assertAlmostEqual(merged[100]["share"], 125 / 150)
+        self.assertEqual(merged[100]["sample"], 150)
+        self.assertAlmostEqual(merged[103]["share"], 10 / 150)
+        self.assertEqual(self.items_of(rows, "head"), [100, 103, 101, 102])
+        # a slot only one list knows: the other list counts as 0 players there
+        self.assertAlmostEqual(
+            next(e for r in rows.values() if r["slot"] == "trinket" for e in r["items"].values() if e["item"] == 200)["share"],
+            35 / 150)
+        # a filter applies to the merged list as to any other
+        rows = self.call("Rows", "paladin", "protection", "overall", self.table(kinds=self.call("ViewKinds", "raid")), None)
+        self.assertEqual(self.items_of(rows, "head"), [100, 101])
+
+    def test_overall_with_one_list_only_uses_that_list(self):
+        rows = self.call("Rows", "mage", "fire", "overall", None, None)
+        self.assertEqual(self.items_of(rows, "head"), [500])
+
+    def test_the_farming_route_groups_by_dungeon_and_sets_the_rest_aside(self):
+        route = self.call("FarmingRoute", "paladin", "protection", "mplus", None)
+        self.assertEqual(route["kind"], "dungeon")
+        groups = list(route["groups"].values())
+        self.assertEqual([g["name"] for g in groups], ["Keep"])
+        item = list(groups[0]["items"].values())[0]
+        self.assertEqual((item["item"], item["slot"], item["boss"], item["worn"]), (101, "head", "Boss", False))
+        self.assertAlmostEqual(groups[0]["score"], 0.06)
+        # the tier piece, the crafted piece and the raid piece M+ players wear are listed apart
+        self.assertEqual([e["item"] for e in route["catalyst"].values()], [100])
+        self.assertEqual([e["item"] for e in route["crafted"].values()], [201])
+        self.assertEqual([e["item"] for e in route["other"].values()], [200])
+
+    def test_the_farming_route_keeps_what_is_worn_but_does_not_count_it(self):
+        worn = self.lua.eval("{[101] = true, [100] = true}")
+        route = self.call("FarmingRoute", "paladin", "protection", "mplus", worn)
+        group = list(route["groups"].values())[0]
+        self.assertTrue(list(group["items"].values())[0]["worn"])
+        self.assertEqual(group["score"], 0)
+        self.assertTrue(list(route["catalyst"].values())[0]["worn"])
+
+    def test_the_farming_route_of_the_raid_groups_by_boss(self):
+        route = self.call("FarmingRoute", "paladin", "protection", "raid", None)
+        self.assertEqual(route["kind"], "raid")
+        # the raid list holds 100 (tier) and 103 (no source): no raid drop, so no group
+        self.assertEqual(len(list(route["groups"].values())), 0)
+        self.assertEqual([e["item"] for e in route["catalyst"].values()], [100])
+
+    def test_the_best_drop_names_the_kind_for_the_window(self):
+        drop, more = self.call("BestDrop", 100)
+        self.assertEqual((drop["kind"], drop["instance"], more), ("catalyst", 0, 0))
+        drop, more = self.call("BestDrop", 101, "raid")
+        self.assertEqual((drop["kind"], drop["encounterName"], more), ("raid", "Eel", 0))
+        self.assertEqual(tuple(self.call("BestDrop", 102)), (None, 0))
+
     def test_share_index_takes_the_best_share_per_content(self):
         index = self.call("ShareIndex", "paladin", "protection")
         self.assertAlmostEqual(index[100]["mplus"], 0.9)

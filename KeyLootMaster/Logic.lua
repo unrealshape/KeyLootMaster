@@ -68,7 +68,7 @@ end
 --- The item level, track and rank a Mythic+ dungeon item drops at for a key level. nil for everything
 --- else: the raid list and items that do not drop in a dungeon.
 function ns.DungeonLevel(item, content, level, vault)
-    if content ~= "mplus" or not ns.KindsOf(item).dungeon then return nil end
+    if content == "raid" or not ns.KindsOf(item).dungeon then return nil end
     return ns.KeyReward(level, vault)
 end
 
@@ -287,10 +287,10 @@ function ns.KindsOf(item)
     return kinds
 end
 
---- The one line that says where an item comes from, plus how many other places there are.
---- With `only` ("dungeon" or "raid") only drops of that kind are named and counted, so the Raid list never
---- names a dungeon and the Mythic+ list never names a boss of the raid.
-function ns.SourceLabel(item, only)
+--- The drop record that stands for an item, plus how many other places there are; nil, 0 for an item without
+--- a known source. With `only` ("dungeon" or "raid") only drops of that kind are considered and counted, so the
+--- Raid list never names a dungeon and the Mythic+ list never names a boss of the raid.
+function ns.BestDrop(item, only)
     local drops = ns.DropsOf(item)
     if only then
         local kept = {}
@@ -306,10 +306,16 @@ function ns.SourceLabel(item, only)
             if kind == drop.kind and index < rank then best, rank = drop, index end
         end
     end
-    best = best or drops[1]
+    return best or drops[1], #drops - 1
+end
+
+--- The one line that says where an item comes from, plus how many other places there are (see ns.BestDrop).
+function ns.SourceLabel(item, only)
+    local best, more = ns.BestDrop(item, only)
+    if not best then return nil, 0 end
     local text = best.instanceName
     if best.encounterName and best.encounterName ~= "" then text = text .. " - " .. best.encounterName end
-    return text, #drops - 1
+    return text, more
 end
 
 --- The secondary-stat letters of an item ("" when unknown) and whether it is a tier piece.
@@ -331,16 +337,80 @@ function ns.Passes(item, filters, equipped)
             if not have:find(letter, 1, true) then return false end
         end
     end
-    if filters.farmable and not ns.KindsOf(item)[filters.farmable] then return false end
+    if filters.kinds then
+        local have, found = ns.KindsOf(item), false
+        for kind in pairs(filters.kinds) do
+            if have[kind] then found = true end
+        end
+        if not found then return false end
+    end
     if filters.missing and equipped and equipped[item] then return false end
     return true
+end
+
+-- What each view offers: Mythic+ the dungeon drops, Raid the raid drops, and both the pieces made at the
+-- Catalyst or crafted. Overall has no limit.
+local VIEW_KINDS = {
+    mplus = { dungeon = true, catalyst = true, crafted = true },
+    raid = { raid = true, catalyst = true, crafted = true },
+}
+
+--- The set of source kinds a view lists ("mplus", "raid"), or nil for no limit ("overall").
+function ns.ViewKinds(content)
+    return VIEW_KINDS[content]
+end
+
+--- How many top players a list of one content stands for: the sample of its first item.
+local function sampleOf(lists)
+    for _, slot in ipairs(ns.SLOT_ORDER) do
+        local first = lists[slot] and lists[slot][1]
+        if first then return first[3] or 0 end
+    end
+    return 0
+end
+
+--- The item lists of a content: { [slot] = { {item, share, sample}, ... } }. "overall" merges the Mythic+ and the
+--- raid list: the share of an item is the players of both lists that wear it over the players of both lists (an
+--- item a list does not hold counts as 0 there), so it is weighted by how many players each list stands for.
+local function listsOf(class, spec, content)
+    local data = tables()
+    local held = data[class] and data[class][spec]
+    if not held then return {} end
+    if content ~= "overall" then return held[content] or {} end
+    local first, second = held.mplus, held.raid
+    if not (first and second) then return first or second or {} end
+    local firstSample, secondSample = sampleOf(first), sampleOf(second)
+    local total = firstSample + secondSample
+    local merged = {}
+    for _, slot in ipairs(ns.SLOT_ORDER) do
+        local players, order = {}, {}
+        for _, list in ipairs({ { first[slot], firstSample }, { second[slot], secondSample } }) do
+            for _, entry in ipairs(list[1] or {}) do
+                local item = entry[1]
+                if not players[item] then
+                    players[item] = 0
+                    order[#order + 1] = item
+                end
+                players[item] = players[item] + entry[2] * list[2]
+            end
+        end
+        local items = {}
+        for index, item in ipairs(order) do
+            items[#items + 1] = { item, players[item] / total, total, index }
+        end
+        table.sort(items, function(a, b)
+            if a[2] ~= b[2] then return a[2] > b[2] end
+            return a[4] < b[4]
+        end)
+        merged[slot] = items
+    end
+    return merged
 end
 
 --- The rows of the window: one per slot, the items that pass the filters, best first.
 --- { { slot = "head", items = { {item, share, sample}, ... } }, ... }
 function ns.Rows(class, spec, content, filters, equipped)
-    local data = tables()
-    local lists = data[class] and data[class][spec] and data[class][spec][content] or {}
+    local lists = listsOf(class, spec, content)
     local rows = {}
     for _, slot in ipairs(ns.SLOT_ORDER) do
         local items = {}
@@ -358,9 +428,7 @@ end
 --- specialization wants. The share and the sample of an item are the lower of the two (both wear it at least
 --- that often), best first. `other` is { class, spec, content } of the second specialization.
 function ns.CommonRows(class, spec, content, other, filters, equipped)
-    local data = tables()
-    local second = data[other.class] and data[other.class][other.spec]
-        and data[other.class][other.spec][other.content] or {}
+    local second = listsOf(other.class, other.spec, other.content)
     local rows = ns.Rows(class, spec, content, filters, equipped)
     for _, row in ipairs(rows) do
         local theirs = {}
@@ -380,6 +448,69 @@ function ns.CommonRows(class, spec, content, other, filters, equipped)
         row.items = common
     end
     return rows
+end
+
+-- An item counts for the farming route when the top players wear it this much (the most worn one of a slot always).
+ns.FARM_MIN_SHARE = 0.2
+
+--- Where to farm: the items the top players wear, grouped by where they drop. `contentKey` is "mplus", "mplus_all"
+--- or "raid" (see ns.ContentKey); `equipped` is a set of the item ids worn now.
+--- { kind = "dungeon"|"raid",
+---   groups = { { name, sub, score, items = { {item, share, slot, boss, worn} } } },  best first
+---   crafted, catalyst, other = { {item, share, slot, worn} } }
+--- A group is a dungeon (Mythic+) or a boss (raid). Per slot the most worn item that drops there counts, and every
+--- one worn by at least ns.FARM_MIN_SHARE; the score of a group adds the shares of the items not worn yet.
+--- Crafted and Catalyst pieces and the drops of the other content (the raid pieces Mythic+ players wear) are
+--- listed apart, the same items from ns.FARM_MIN_SHARE on.
+function ns.FarmingRoute(class, spec, contentKey, equipped)
+    local kind = contentKey == "raid" and "raid" or "dungeon"
+    local lists = listsOf(class, spec, contentKey)
+    local route = { kind = kind, groups = {}, crafted = {}, catalyst = {}, other = {} }
+    local byKey = {}
+    for _, slot in ipairs(ns.SLOT_ORDER) do
+        local first = true
+        for _, entry in ipairs(lists[slot] or {}) do
+            local item, share = entry[1], entry[2]
+            local kinds = ns.KindsOf(item)
+            local worn = equipped and equipped[item] and true or false
+            if kinds[kind] then
+                if first or share >= ns.FARM_MIN_SHARE then
+                    local seen = {}
+                    for _, drop in ipairs(ns.DropsOf(item)) do
+                        local key = kind == "raid" and (drop.instance .. ":" .. drop.encounter) or tostring(drop.instance)
+                        if drop.kind == kind and not seen[key] then
+                            seen[key] = true
+                            local group = byKey[key]
+                            if not group then
+                                group = { name = kind == "raid" and drop.encounterName or drop.instanceName,
+                                    sub = kind == "raid" and drop.instanceName or nil, score = 0, items = {} }
+                                byKey[key] = group
+                                route.groups[#route.groups + 1] = group
+                            end
+                            group.items[#group.items + 1] = { item = item, share = share, slot = slot, boss = drop.encounterName, worn = worn }
+                            if not worn then group.score = group.score + share end
+                        end
+                    end
+                end
+                first = false
+            elseif share >= ns.FARM_MIN_SHARE then
+                local target = (kinds.catalyst and route.catalyst) or (kinds.crafted and route.crafted)
+                    or ((kinds.dungeon or kinds.raid) and route.other) or nil
+                if target then target[#target + 1] = { item = item, share = share, slot = slot, worn = worn } end
+            end
+        end
+    end
+    local function byShare(a, b) return a.share > b.share end
+    for _, group in ipairs(route.groups) do table.sort(group.items, byShare) end
+    table.sort(route.groups, function(a, b)
+        if a.score ~= b.score then return a.score > b.score end
+        if #a.items ~= #b.items then return #a.items > #b.items end
+        return a.name < b.name
+    end)
+    table.sort(route.crafted, byShare)
+    table.sort(route.catalyst, byShare)
+    table.sort(route.other, byShare)
+    return route
 end
 
 --- item -> { mplus = share, raid = share } over every slot of one specialization (for tooltips).
