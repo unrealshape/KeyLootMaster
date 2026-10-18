@@ -6,8 +6,17 @@ ns.L = L
 
 local overrides = {
     deDE = {
+        ["Overall"] = "Gesamt",
         ["Mythic+"] = "Mythic+",
         ["Raid"] = "Raid",
+        ["Farming"] = "Farmen",
+        ["%d items"] = "%d Items",
+        ["1 item"] = "1 Item",
+        ["+%d more"] = "+%d weitere",
+        ["Raid drops Mythic+ players wear"] = "Raid-Drops, die Mythic+-Spieler tragen",
+        ["Dungeon drops raiders wear"] = "Dungeon-Drops, die Raider tragen",
+        ["Nothing to farm for this specialization yet."] = "Für diese Spezialisierung gibt es noch nichts zu farmen.",
+        ["The score of a dungeon adds up the share of top players who wear what drops there. What you wear is marked and does not count."] = "Die Punkte eines Dungeons addieren den Anteil der Top-Spieler, die tragen, was dort droppt. Was du trägst, ist markiert und zählt nicht mit.",
         ["Compare with"] = "Vergleichen mit",
         ["Realm"] = "Realm",
         ["Race"] = "Volk",

@@ -75,6 +75,7 @@ local function colorFor(quality)
     if color then return color.r, color.g, color.b end
     return 0.64, 0.21, 0.93
 end
+UI.ItemName, UI.ItemColor = itemNameOf, colorFor   -- for the pages (Pages.lua)
 
 local function showItemTooltip(owner, id)
     if not (GameTooltip and id) then return end
@@ -435,6 +436,8 @@ local function openInGuide(item)
         end
     end
 end
+
+UI.OpenInGuide = openInGuide
 
 local function rule(parent, x, y, width, height)
     local line = parent:CreateTexture(nil, "ARTWORK")

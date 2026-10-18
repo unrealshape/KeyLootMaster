@@ -424,6 +424,202 @@ local function refreshPlayers(class, spec, group)
     return nil
 end
 
+-- ------------------------------------------------------------------ farming page
+
+-- Where to farm (ns.FarmingRoute): the dungeons (or bosses) in the order they are worth running, with the items
+-- that drop there, on the left; the Crafted and Catalyst pieces and the other content's drops on the right.
+local farming = { main = {}, side = {} }
+local MAIN_LINES, SIDE_LINES = 22, 20
+local SIDE_CAPS = { crafted = 7, catalyst = 5, other = 4 }
+local MAIN_X, MAIN_WIDTH, SIDE_X, SIDE_WIDTH = 24, 560, 604, 272
+
+local function buildFarmingLine(parent, x, y, width, wide)
+    local line = CreateFrame("Button", nil, parent)
+    line.isFarmingLine = true
+    line:SetSize(width, 20)
+    line:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    line.back = line:CreateTexture(nil, "BACKGROUND")
+    line.back:SetAllPoints()
+    line.back:SetColorTexture(C.panel[1], C.panel[2], C.panel[3], C.panel[4] or 1)
+    line.headText = Skin.Text(line, "GameFontNormal", 13)
+    line.headText:SetPoint("LEFT", 8, 0)
+    line.headText:SetWidth(width - 100)
+    line.headText:SetJustifyH("LEFT")
+    line.countText = Skin.Text(line, "GameFontDisableSmall", 11)
+    line.countText:SetPoint("RIGHT", -8, 0)
+    line.countText:SetWidth(90)
+    line.countText:SetJustifyH("RIGHT")
+    line.icon = line:CreateTexture(nil, "ARTWORK")
+    line.icon:SetSize(16, 16)
+    line.icon:SetPoint("LEFT", 8, 0)
+    line.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    line.itemText = Skin.Text(line, "GameFontHighlight", 12)
+    line.itemText:SetPoint("LEFT", 30, 0)
+    line.itemText:SetWidth(wide and 250 or 190)
+    line.itemText:SetJustifyH("LEFT")
+    line.shareText = Skin.Text(line, "GameFontHighlight", 12)
+    line.shareText:SetPoint("RIGHT", -8, 0)
+    line.shareText:SetWidth(46)
+    line.shareText:SetJustifyH("RIGHT")
+    if wide then
+        line.bossText = Skin.Text(line, "GameFontDisableSmall", 11)
+        line.bossText:SetPoint("LEFT", 286, 0)
+        line.bossText:SetWidth(150)
+        line.bossText:SetJustifyH("LEFT")
+        line.slotText = Skin.Text(line, "GameFontDisableSmall", 11)
+        line.slotText:SetPoint("LEFT", 440, 0)
+        line.slotText:SetWidth(62)
+        line.slotText:SetJustifyH("LEFT")
+    end
+    line:SetScript("OnEnter", function(self) if self.itemId and itemTooltip(self, self.itemId) then GameTooltip:Show() end end)
+    line:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    line:SetScript("OnClick", function(self)
+        if not self.itemId then return end
+        if IsModifiedClick and IsModifiedClick("CHATLINK") then
+            linkItem(self.itemId)
+        elseif UI.OpenInGuide then
+            UI.OpenInGuide(self.itemId)
+        end
+    end)
+    return line
+end
+
+--- Empties a line: nothing shown, nothing to click.
+local function clearFarmingLine(line)
+    line.itemId = nil
+    line:Hide()
+    line.back:Hide()
+    for _, part in ipairs({ line.headText, line.countText, line.icon, line.itemText, line.shareText, line.bossText, line.slotText }) do
+        part:Hide()
+    end
+    line.headText:SetText(""); line.countText:SetText(""); line.itemText:SetText("")
+    line.shareText:SetText("")
+    if line.bossText then line.bossText:SetText(""); line.slotText:SetText("") end
+end
+
+local function showFarmingHeader(line, head, count)
+    clearFarmingLine(line)
+    line:Show()
+    line.back:Show()
+    line.headText:SetText(head); line.headText:Show()
+    line.countText:SetText(count or ""); line.countText:SetShown(count ~= nil)
+end
+
+local function showFarmingItem(line, entry)
+    clearFarmingLine(line)
+    line:Show()
+    line.back:Hide()
+    line.itemId = entry.item
+    line.icon:SetTexture(iconOf(entry.item)); line.icon:Show()
+    local name, quality = UI.ItemName(entry.item)
+    line.itemText:SetTextColor(UI.ItemColor(quality))
+    line.itemText:SetText((name or ("[" .. entry.item .. "]")) .. (entry.worn and ("  " .. paint("ff52b7a8", L["Equipped"])) or ""))
+    line.itemText:Show()
+    line.shareText:SetText(ns.Percent(entry.share)); line.shareText:Show()
+    if line.bossText then
+        line.bossText:SetText(entry.boss or ""); line.bossText:Show()
+        line.slotText:SetText(L[ns.SLOT_NAMES[entry.slot]] or entry.slot); line.slotText:Show()
+    end
+end
+
+local function itemCount(count)
+    return count == 1 and L["1 item"] or string.format(L["%d items"], count)
+end
+
+local function buildFarming(parent)
+    local parts = {}
+    local function keep(part) parts[#parts + 1] = part; return part end
+    -- the parts to hide with the page: a line and everything on it
+    local function keepLine(line)
+        keep(line)
+        for _, part in ipairs({ line.back, line.headText, line.countText, line.icon, line.itemText, line.shareText,
+            line.bossText, line.slotText }) do
+            keep(part)
+        end
+        return line
+    end
+    for index = 1, MAIN_LINES do
+        farming.main[index] = keepLine(buildFarmingLine(parent, MAIN_X, -118 - (index - 1) * 21, MAIN_WIDTH, true))
+    end
+    for index = 1, SIDE_LINES do
+        farming.side[index] = keepLine(buildFarmingLine(parent, SIDE_X, -118 - (index - 1) * 21, SIDE_WIDTH, false))
+    end
+    farming.empty = keep(makeText(parent, "GameFontDisable", 24, -124, 600))
+    return parts
+end
+
+--- The lines of the left column: a header per group, its items below; cut at a group's end when they do not all fit.
+local function mainFarmingLines(route)
+    local lines, starts = {}, {}
+    for rank, group in ipairs(route.groups) do
+        starts[#starts + 1] = #lines + 1
+        local head = paint(GOLD, rank .. "  " .. group.name) .. (group.sub and ("  " .. paint(GREY, group.sub)) or "")
+        lines[#lines + 1] = { head = head, count = itemCount(#group.items) }
+        for _, entry in ipairs(group.items) do lines[#lines + 1] = { entry = entry } end
+    end
+    if #lines <= MAIN_LINES then return lines end
+    -- keep whole groups while a line stays free for the note; the first group is cut when it alone is too long
+    local keepUntil, groupsKept = MAIN_LINES - 1, 0
+    for index in ipairs(starts) do
+        local last = (starts[index + 1] or (#lines + 1)) - 1
+        if last <= MAIN_LINES - 1 then keepUntil, groupsKept = last, index end
+    end
+    local cut = {}
+    for index = 1, keepUntil do cut[index] = lines[index] end
+    cut[#cut + 1] = { note = string.format(L["+%d more"], #route.groups - groupsKept) }
+    return cut
+end
+
+--- The lines of the right column: Crafted, Catalyst, the other content's drops; each with its items.
+local function sideFarmingLines(route)
+    local lines = {}
+    local other = route.kind == "dungeon" and L["Raid drops Mythic+ players wear"] or L["Dungeon drops raiders wear"]
+    for _, section in ipairs({
+        { "crafted", L["Crafted"] }, { "catalyst", L["Catalyst / tier"] }, { "other", other },
+    }) do
+        local list = route[section[1]]
+        if #list > 0 then
+            lines[#lines + 1] = { head = paint(GOLD, section[2]), count = itemCount(#list) }
+            for index, entry in ipairs(list) do
+                if index > SIDE_CAPS[section[1]] then break end
+                lines[#lines + 1] = { entry = entry }
+            end
+        end
+    end
+    return lines
+end
+
+local function fillFarmingColumn(column, lines)
+    for index, line in ipairs(column) do
+        local what = lines[index]
+        if not what then
+            clearFarmingLine(line)
+        elseif what.entry then
+            showFarmingItem(line, what.entry)
+        elseif what.note then
+            showFarmingHeader(line, paint(GREY, what.note), nil)
+            line.back:Hide()
+        else
+            showFarmingHeader(line, what.head, what.count)
+        end
+    end
+end
+
+local function refreshFarming(class, spec, group)
+    local view = ns.Settings().content == "raid" and "raid" or "mplus"
+    local route = class and ns.FarmingRoute(class, spec, ns.ContentKey(class, spec, view, group), ns.EquippedItems())
+    local main = route and mainFarmingLines(route) or {}
+    local side = route and sideFarmingLines(route) or {}
+    fillFarmingColumn(farming.main, main)
+    fillFarmingColumn(farming.side, side)
+    local nothing = #main == 0 and #side == 0
+    farming.empty:SetText(not class and L["No data for this specialization."] or L["Nothing to farm for this specialization yet."])
+    farming.empty:SetShown(nothing)
+    if nothing then return nil end
+    return L["The score of a dungeon adds up the share of top players who wear what drops there. What you wear is marked and does not count."]
+end
+
+UI.RegisterPage("farming", { build = buildFarming, refresh = refreshFarming })
 UI.RegisterPage("gear", { build = buildGear, refresh = refreshGear })
 UI.RegisterPage("talents", { build = buildTalents, refresh = refreshTalents })
 UI.RegisterPage("players", { build = buildPlayers, refresh = refreshPlayers })

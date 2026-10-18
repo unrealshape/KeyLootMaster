@@ -9,9 +9,13 @@ drops, for Mythic+ dungeons and the current raid. The data comes from what the b
 
 `/klm` (or the button in the addon list next to the minimap) opens the window.
 
-- **Items:** the best items per slot for your specialization (or any other). The **Mythic+** and **Raid**
-  buttons choose the list: what drops in the dungeons or in the raid. Each item names the dungeon and boss
-  (or the raid boss) and opens in the Adventure Guide.
+- **Items:** the best items per slot for your specialization (or any other). The **Overall**, **Mythic+** and
+  **Raid** buttons choose the list: both together, what drops in the dungeons, or what drops in the raid (the
+  Catalyst and crafted pieces are listed in each). Each item names the dungeon and boss (or the raid boss) and
+  opens in the Adventure Guide.
+- **Farming:** where to farm. The dungeons (or raid bosses) in the order they are worth running, with the
+  items that drop there and how many of the top players wear them; the crafted and Catalyst pieces beside it.
+  What you wear already is marked **Equipped** and does not count.
 - **Key level and Great Vault:** item levels at the key level you pick, or the Vault reward of that level.
 - **Two specializations at once:** pick "Compare with" in the specialization menu, and the lists show only
   the items both specializations want (for example Retribution and Holy).

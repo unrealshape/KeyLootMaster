@@ -384,6 +384,48 @@ class SmokeTest(unittest.TestCase):
                 self.assertTrue(any("1x" in s and "Meta" in s and "2x" in s and "Green" in s and "42%" in s
                                     for s in self.shown_texts()))
 
+    def farming_lines(self):
+        return [w for w in self.g.find_widgets("Button").values() if w.isFarmingLine and w.shown]
+
+    def open_farming(self):
+        self.open_window()
+        tab = self.page_button("Farming")
+        tab.scripts.OnClick(tab)
+
+    def test_the_farming_page_lists_the_dungeons_with_their_items_and_marks_what_is_worn(self):
+        ns = self.boot()
+        self.open_farming()
+        self.assertEqual(len(self.rows()), 0)
+        route = ns.FarmingRoute("paladin", "protection", "mplus", ns.EquippedItems())
+        best = route["groups"][1]
+        texts = self.shown_texts()
+        self.assertTrue(any(best["name"] in t for t in texts))
+        lines = [w for w in self.farming_lines() if w.itemId is not None]
+        self.assertTrue(lines)
+        self.assertTrue(all(str(w.itemText.text).startswith("Item ") for w in lines))
+        # the stub wears the tier head piece: it is listed with the Catalyst pieces and marked
+        self.assertTrue(any("Equipped" in str(w.itemText.text) and w.itemId == 271465 for w in lines))
+        # a click opens the item in the Adventure Guide, a modified click links it (no error either way)
+        lines[0].scripts.OnClick(lines[0])
+        # the Mythic+ and Raid buttons switch the list; Overall is not offered here
+        self.assertFalse(self.content_button("Overall").shown)
+        self.content_button("Raid").scripts.OnClick(self.content_button("Raid"))
+        raid = ns.FarmingRoute("paladin", "protection", "raid", ns.EquippedItems())
+        self.assertTrue(any(raid["groups"][1]["name"] in t for t in self.shown_texts()))
+
+    def test_the_farming_page_reads_overall_as_mythic_plus_and_says_so_without_data(self):
+        ns = self.boot()
+        self.g.KeyLootMasterDB.content = "overall"
+        self.open_farming()
+        self.assertTrue(self.content_button("Mythic+").shown)
+        route = ns.FarmingRoute("paladin", "protection", "mplus", None)
+        self.assertTrue(any(route["groups"][1]["name"] in t for t in self.shown_texts()))
+        self.g.KeyLootMasterDB.spec = 123456
+        self.g.SlashCmdList["KEYLOOTMASTER"]("")
+        self.g.SlashCmdList["KEYLOOTMASTER"]("")
+        self.assertTrue(any("No data for this specialization" in t for t in self.shown_texts()))
+        self.assertEqual(len([w for w in self.farming_lines() if w.itemId is not None]), 0)
+
     def test_gems_and_enchantments_link_like_items(self):
         self.boot()
         self.lua.execute(self.GEAR.replace('name = "Empowered Hex of Leeching", n = 42',
