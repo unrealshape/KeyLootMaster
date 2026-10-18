@@ -6,6 +6,16 @@ ns.L = L
 
 local overrides = {
     deDE = {
+        ["Catalyst"] = "Katalysator",
+        ["Raw pieces:"] = "Rohteile:",
+        ["Tier set"] = "Tier-Set",
+        ["Alchemy"] = "Alchemie",
+        ["Blacksmithing"] = "Schmiedekunst",
+        ["Engineering"] = "Ingenieurskunst",
+        ["Inscription"] = "Inschriftenkunde",
+        ["Jewelcrafting"] = "Juwelenschleifen",
+        ["Leatherworking"] = "Lederverarbeitung",
+        ["Tailoring"] = "Schneiderei",
         ["Overall"] = "Gesamt",
         ["Mythic+"] = "Mythic+",
         ["Raid"] = "Raid",

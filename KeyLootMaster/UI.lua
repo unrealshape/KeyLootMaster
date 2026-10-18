@@ -31,7 +31,7 @@ local PAGE_ORDER = { "items", "stats", "gear", "talents", "players", "farming" }
 local PAGE_LABELS = { items = "Items", stats = "Stats", gear = "Gear", talents = "Talents", players = "Players",
     farming = "Farming" }
 local stat = { main = {}, minor = {} }
-local shownKey, bisSet = nil, {}
+local shownKey, shownClass, bisSet = nil, nil, {}
 local TRACK_NAMES = { veteran = "Veteran", champion = "Champion", hero = "Hero", myth = "Myth" }
 local TIER_TEXT = { strong = "Good", option = "Decent" }
 local TIER_COLOR = { strong = "ffa335ee", option = "ffffffff" }
@@ -103,12 +103,28 @@ local function hideTooltip() if GameTooltip then GameTooltip:Hide() end end
 
 --- Where an item comes from, as the shown list names it: the dungeon list names dungeons, the raid list bosses of
 --- the raid, Overall the most specific source. Pieces without an instance (Catalyst, crafted) name their kind.
-local function sourceText(id)
+--- A Catalyst piece names the dungeons its raw pieces drop in (for the class shown and the slot, when the data
+--- has them); a crafted piece its profession.
+local function sourceText(id, slotKey)
     local content = ns.Settings().content
     local only = content == "raid" and "raid" or (content == "mplus" and "dungeon" or nil)
     local best, more = ns.BestDrop(id, only)
     if not best then return L["Other source"] end
-    local text = best.instance == 0 and L[best.instanceName] or ns.SourceLabel(id, only)
+    local text
+    if best.kind == "catalyst" and shownClass and slotKey then
+        local dungeons = ns.CatalystDungeons(shownClass, { slotKey })
+        if #dungeons > 0 then
+            text = L["Catalyst"] .. " - " .. dungeons[1].name
+            if dungeons[2] then text = text .. ", " .. dungeons[2].name end
+            if #dungeons > 2 then text = text .. ", ..." end
+        end
+    end
+    if not text then
+        text = best.instance == 0 and L[best.instanceName] or ns.SourceLabel(id, only)
+        if best.kind == "crafted" and best.encounterName and best.encounterName ~= "" then
+            text = text .. " - " .. L[best.encounterName]
+        end
+    end
     if more > 0 then text = text .. " (+" .. more .. ")" end
     return text
 end
@@ -604,7 +620,7 @@ local function fillItem(target, entry, worn, slotKey)
     local r, g, b = colorFor(levelLine and 4 or quality)
     target.name:SetTextColor(r, g, b)
     target.name:SetText((name or ("[" .. id .. "]")) .. (worn[id] and ("  |cff52b7a8" .. L["Equipped"] .. "|r") or "") .. tagsOf(id, entry.share))
-    target.where:SetText(levelLine and (levelLine .. "   " .. sourceText(id)) or sourceText(id))
+    target.where:SetText(levelLine and (levelLine .. "   " .. sourceText(id, slotKey)) or sourceText(id, slotKey))
     local count = math.floor(entry.share * entry.sample + 0.5)
     local color = bisSet[id] and BIS_COLOR or (ns.TierOf(entry.share) and TIER_COLOR[ns.TierOf(entry.share)]) or "ffffffff"
     target.share:SetText("|c" .. color .. count .. "|r |cff999999" .. ns.Percent(entry.share) .. "|r")
@@ -620,6 +636,7 @@ function UI.Refresh()
     local db = ns.Settings()
     local worn = ns.EquippedItems()
     shownKey = class and (class .. "-" .. spec) or nil
+    shownClass = class
     local contentKey = ns.ContentKey(class or "", spec or "", db.content, db.group)
     bisSet = ns.BisItems(class or "", spec or "", contentKey)
     local _, otherClass, otherSpec = ns.CompareSpec()

@@ -187,7 +187,30 @@ local function buildGear(parent)
     for index = 1, 3 do gear.embellishments[index] = keep(makeText(parent, "GameFontHighlight", 480, -504 - (index - 1) * 22, 330)) end
     gear.empty = keep(makeText(parent, "GameFontDisable", 24, -124, 600))
     gear.empty:SetText(L["No gear data for this specialization yet."])
+    -- the class's tier set under the enchantments (placed by showTierSet, below the rows in use)
+    gear.parent = parent
+    gear.tierTitle = keep(makeText(parent, "GameFontNormal", 24, -420, 430))
+    gear.tierText = keep(makeText(parent, "GameFontHighlight", 24, -446, 430))
     return parts
+end
+
+local LANG = (GetLocale and GetLocale() == "deDE") and "de" or "en"
+
+--- The tier set of the class (name and what 2 and 4 pieces give) below the `rowsUsed` enchantment rows.
+local function showTierSet(class, rowsUsed)
+    local tier = class and ns.TierSetOf(class, LANG)
+    gear.tierTitle:SetShown(tier ~= nil)
+    gear.tierText:SetShown(tier ~= nil)
+    if not tier then return end
+    local top = -142 - rowsUsed * 26 - 14
+    gear.tierTitle:ClearAllPoints()
+    gear.tierTitle:SetPoint("TOPLEFT", gear.parent, "TOPLEFT", 24, top)
+    gear.tierText:ClearAllPoints()
+    gear.tierText:SetPoint("TOPLEFT", gear.parent, "TOPLEFT", 24, top - 24)
+    gear.tierTitle:SetText(paint(GOLD, L["Tier set"] .. ": ") .. tier.name)
+    local lines = {}
+    for _, bonus in ipairs(tier.bonuses) do lines[#lines + 1] = paint(GOLD, "(" .. bonus.count .. ")") .. " " .. bonus.text end
+    gear.tierText:SetText(table.concat(lines, "\n"))
 end
 
 local function refreshGear(class, spec, group)
@@ -202,6 +225,7 @@ local function refreshGear(class, spec, group)
     if not info then
         for _, gem in ipairs(gear.gems) do gem:Hide() end
         for _, row in ipairs(gear.rows) do row:Hide() end
+        showTierSet(class, 0)
         return nil
     end
     local total = info.n or 0
@@ -227,6 +251,7 @@ local function refreshGear(class, spec, group)
         end
     end
     for index = used + 1, MAX_SLOT_ROWS do gear.rows[index]:Hide() end
+    showTierSet(class, used)
     for index, button in ipairs(gear.gems) do
         local gem = info.gems and info.gems[index]
         button:SetShown(gem ~= nil)
@@ -429,13 +454,14 @@ end
 -- Where to farm (ns.FarmingRoute): the dungeons (or bosses) in the order they are worth running, with the items
 -- that drop there, on the left; the Crafted and Catalyst pieces and the other content's drops on the right.
 local farming = { main = {}, side = {} }
-local MAIN_LINES, SIDE_LINES = 22, 20
+local MAIN_LINES, SIDE_LINES = 22, 22
 local SIDE_CAPS = { crafted = 7, catalyst = 5, other = 4 }
 local MAIN_X, MAIN_WIDTH, SIDE_X, SIDE_WIDTH = 24, 560, 604, 272
 
 local function buildFarmingLine(parent, x, y, width, wide)
     local line = CreateFrame("Button", nil, parent)
     line.isFarmingLine = true
+    line.lineWidth = width
     line:SetSize(width, 20)
     line:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     line.back = line:CreateTexture(nil, "BACKGROUND")
@@ -501,6 +527,7 @@ local function showFarmingHeader(line, head, count)
     clearFarmingLine(line)
     line:Show()
     line.back:Show()
+    line.headText:SetWidth(line.lineWidth - (count and 100 or 16))
     line.headText:SetText(head); line.headText:Show()
     line.countText:SetText(count or ""); line.countText:SetShown(count ~= nil)
 end
@@ -513,7 +540,13 @@ local function showFarmingItem(line, entry)
     line.icon:SetTexture(iconOf(entry.item)); line.icon:Show()
     local name, quality = UI.ItemName(entry.item)
     line.itemText:SetTextColor(UI.ItemColor(quality))
-    line.itemText:SetText((name or ("[" .. entry.item .. "]")) .. (entry.worn and ("  " .. paint("ff52b7a8", L["Equipped"])) or ""))
+    local text = (name or ("[" .. entry.item .. "]")) .. (entry.worn and ("  " .. paint("ff52b7a8", L["Equipped"])) or "")
+    if not line.bossText then
+        -- the narrow column has no source column: a crafted piece names its profession behind the name
+        local drop = ns.BestDrop(entry.item)
+        if drop and drop.kind == "crafted" and drop.encounterName ~= "" then text = text .. "  " .. paint(GREY, L[drop.encounterName]) end
+    end
+    line.itemText:SetText(text)
     line.itemText:Show()
     line.shareText:SetText(ns.Percent(entry.share)); line.shareText:Show()
     if line.bossText then
@@ -571,7 +604,7 @@ local function mainFarmingLines(route)
 end
 
 --- The lines of the right column: Crafted, Catalyst, the other content's drops; each with its items.
-local function sideFarmingLines(route)
+local function sideFarmingLines(route, class)
     local lines = {}
     local other = route.kind == "dungeon" and L["Raid drops Mythic+ players wear"] or L["Dungeon drops raiders wear"]
     for _, section in ipairs({
@@ -580,9 +613,25 @@ local function sideFarmingLines(route)
         local list = route[section[1]]
         if #list > 0 then
             lines[#lines + 1] = { head = paint(GOLD, section[2]), count = itemCount(#list) }
+            local slots = {}
             for index, entry in ipairs(list) do
                 if index > SIDE_CAPS[section[1]] then break end
                 lines[#lines + 1] = { entry = entry }
+                slots[#slots + 1] = entry.slot
+            end
+            if section[1] == "catalyst" and route.kind == "dungeon" then
+                -- where the raw pieces of these slots drop (any piece of the slot and armor type will do)
+                local places = {}
+                for index, dungeon in ipairs(ns.CatalystDungeons(class, slots)) do
+                    if index > 4 then break end
+                    places[#places + 1] = string.format("%s (%d)", dungeon.name, dungeon.count)
+                end
+                if #places > 0 then
+                    lines[#lines + 1] = { note = L["Raw pieces:"] .. " " .. table.concat(places, " - ", 1, math.min(2, #places)) }
+                end
+                if #places > 2 then
+                    lines[#lines + 1] = { note = table.concat(places, " - ", 3, #places) }
+                end
             end
         end
     end
@@ -609,7 +658,7 @@ local function refreshFarming(class, spec, group)
     local view = ns.Settings().content == "raid" and "raid" or "mplus"
     local route = class and ns.FarmingRoute(class, spec, ns.ContentKey(class, spec, view, group), ns.EquippedItems())
     local main = route and mainFarmingLines(route) or {}
-    local side = route and sideFarmingLines(route) or {}
+    local side = route and sideFarmingLines(route, class) or {}
     fillFarmingColumn(farming.main, main)
     fillFarmingColumn(farming.side, side)
     local nothing = #main == 0 and #side == 0

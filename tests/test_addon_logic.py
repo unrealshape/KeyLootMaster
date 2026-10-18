@@ -38,6 +38,14 @@ KeyLootMasterItems = {
   [200] = { s = "chm", l = 230 },
 }
 KeyLootMasterSpecs = { [66] = {"paladin", "protection"}, [63] = {"mage", "fire"}, [999] = {"ghost", "none"} }
+KeyLootMasterCatalyst = {
+  head = { plate = { {1001, 10, "Keep", 1, "Boss A"}, {1002, 10, "Keep", 1, "Boss A"}, {1003, 20, "Temple", 2, "Boss B"} },
+           cloth = { {1004, 30, "Vale", 3, "Boss C"} } },
+  chest = { plate = { {1005, 20, "Temple", 2, "Boss B"}, {1006, 20, "Temple", 4, "Boss D"} } },
+}
+KeyLootMasterTierSet = {
+  paladin = { name = {"Flame", "Flamme"}, bonus = { [4] = {"Big four.", ""}, [2] = {"Big two.", "Groß zwei."} } },
+}
 """
 
 
@@ -179,6 +187,31 @@ class LogicTest(unittest.TestCase):
         # the raid list holds 100 (tier) and 103 (no source): no raid drop, so no group
         self.assertEqual(len(list(route["groups"].values())), 0)
         self.assertEqual([e["item"] for e in route["catalyst"].values()], [100])
+
+    def test_the_catalyst_dungeons_are_ranked_by_how_many_raw_pieces_drop_there(self):
+        both = self.call("CatalystDungeons", "paladin", self.lua.table_from(["head", "chest"]))
+        self.assertEqual([(d["name"], d["count"]) for d in both.values()], [("Temple", 3), ("Keep", 2)])
+        head = self.call("CatalystDungeons", "paladin", self.lua.table_from(["head"]))
+        self.assertEqual([(d["name"], d["count"]) for d in head.values()], [("Keep", 2), ("Temple", 1)])
+        # the armor type decides: a mage (cloth) is not offered plate pieces
+        cloth = self.call("CatalystDungeons", "mage", self.lua.table_from(["head"]))
+        self.assertEqual([d["name"] for d in cloth.values()], ["Vale"])
+        # unknown class, unknown slot, no data at all
+        self.assertEqual(len(list(self.call("CatalystDungeons", "ghost", self.lua.table_from(["head"])).values())), 0)
+        self.assertEqual(len(list(self.call("CatalystDungeons", "paladin", self.lua.table_from(["legs"])).values())), 0)
+        self.lua.execute("KeyLootMasterCatalyst = nil")
+        self.assertEqual(len(list(self.call("CatalystDungeons", "paladin", self.lua.table_from(["head"])).values())), 0)
+
+    def test_the_tier_set_comes_in_the_players_language_with_english_as_the_fallback(self):
+        english = self.call("TierSetOf", "paladin", "en")
+        self.assertEqual(english["name"], "Flame")
+        self.assertEqual([(b["count"], b["text"]) for b in english["bonuses"].values()], [(2, "Big two."), (4, "Big four.")])
+        german = self.call("TierSetOf", "paladin", "de")
+        self.assertEqual(german["name"], "Flamme")
+        self.assertEqual([b["text"] for b in german["bonuses"].values()], ["Groß zwei.", "Big four."])
+        self.assertIsNone(self.call("TierSetOf", "mage", "en"))
+        self.lua.execute("KeyLootMasterTierSet = nil")
+        self.assertIsNone(self.call("TierSetOf", "paladin", "en"))
 
     def test_the_best_drop_names_the_kind_for_the_window(self):
         drop, more = self.call("BestDrop", 100)

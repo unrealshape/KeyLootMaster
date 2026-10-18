@@ -450,6 +450,58 @@ function ns.CommonRows(class, spec, content, other, filters, equipped)
     return rows
 end
 
+-- The armor type of every class: the Catalyst makes a tier piece of it.
+ns.ARMOR_OF_CLASS = {
+    ["death-knight"] = "plate", paladin = "plate", warrior = "plate",
+    hunter = "mail", shaman = "mail", evoker = "mail",
+    druid = "leather", monk = "leather", ["demon-hunter"] = "leather", rogue = "leather",
+    priest = "cloth", mage = "cloth", warlock = "cloth",
+}
+
+--- The dungeons whose drops the Catalyst can turn into a tier piece of the given slots for a class (its armor
+--- type), the one with the most raw pieces first: { { instance, name, count }, ... }. Empty without the data
+--- (KeyLootMasterCatalyst[slot][armor] = { {item, instance, instanceName, encounter, encounterName}, ... }).
+function ns.CatalystDungeons(class, slots)
+    local all, armor = KeyLootMasterCatalyst, ns.ARMOR_OF_CLASS[class]
+    local list = {}
+    if not (all and armor) then return list end
+    local byInstance = {}
+    for _, slot in ipairs(slots) do
+        local pieces = all[slot] and all[slot][armor] or {}
+        for _, piece in ipairs(pieces) do
+            local held = byInstance[piece[2]]
+            if not held then
+                held = { instance = piece[2], name = piece[3], count = 0 }
+                byInstance[piece[2]] = held
+                list[#list + 1] = held
+            end
+            held.count = held.count + 1
+        end
+    end
+    table.sort(list, function(a, b)
+        if a.count ~= b.count then return a.count > b.count end
+        return a.name < b.name
+    end)
+    return list
+end
+
+--- The tier set of a class in a language ("en" or "de"; a missing German text reads English):
+--- { name, bonuses = { { count = 2, text }, { count = 4, text } } }, or nil without the data
+--- (KeyLootMasterTierSet[class] = { name = {en, de}, bonus = { [2] = {en, de}, ... } }).
+function ns.TierSetOf(class, lang)
+    local all = KeyLootMasterTierSet
+    local entry = all and all[class]
+    if not entry then return nil end
+    local function pick(pair)
+        if lang == "de" and pair[2] and pair[2] ~= "" then return pair[2] end
+        return pair[1]
+    end
+    local bonuses = {}
+    for count, pair in pairs(entry.bonus or {}) do bonuses[#bonuses + 1] = { count = count, text = pick(pair) } end
+    table.sort(bonuses, function(a, b) return a.count < b.count end)
+    return { name = pick(entry.name), bonuses = bonuses }
+end
+
 -- An item counts for the farming route when the top players wear it this much (the most worn one of a slot always).
 ns.FARM_MIN_SHARE = 0.2
 

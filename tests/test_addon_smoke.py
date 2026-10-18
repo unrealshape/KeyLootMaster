@@ -413,6 +413,47 @@ class SmokeTest(unittest.TestCase):
         raid = ns.FarmingRoute("paladin", "protection", "raid", ns.EquippedItems())
         self.assertTrue(any(raid["groups"][1]["name"] in t for t in self.shown_texts()))
 
+    CATALYST = ('KeyLootMasterCatalyst = { '
+                'head = { plate = { {1001, 1041, "Kings\' Rest", 2172, "Dazar"}, {1002, 1041, "Kings\' Rest", 2172, "Dazar"}, '
+                '{1003, 1030, "Temple of Sethraliss", 2144, "Galvazzt"} } }, '
+                'chest = { plate = { {1004, 1041, "Kings\' Rest", 2172, "Dazar"} } } }')
+    TIERSET = ('KeyLootMasterTierSet = { paladin = { name = {"Radiance of the Consecrated Flame", "Strahlung"}, '
+               'bonus = { [2] = {"Consecration is larger.", "Weihe ist größer."}, [4] = {"Enemies take more damage.", ""} } } }')
+
+    def test_a_tier_piece_names_the_dungeons_its_raw_pieces_drop_in_and_a_crafted_one_its_profession(self):
+        self.boot()
+        self.lua.execute(self.CATALYST)
+        self.lua.execute('KeyLootMasterDrops[237830][1].encounterName = "Blacksmithing"')
+        self.open_window()
+        where = {r.itemId: str(r.where.text) for r in self.rows()}
+        self.assertIn("Catalyst - Kings' Rest, Temple of Sethraliss", where[271465])   # the head piece
+        self.assertIn("Crafted - Blacksmithing", where[237830])                        # the waist piece
+
+    def test_the_farming_page_names_where_the_raw_pieces_of_the_tier_slots_drop(self):
+        self.boot()
+        self.lua.execute(self.CATALYST)
+        self.open_farming()
+        notes = [t for t in self.shown_texts() if "Raw pieces:" in t]
+        self.assertEqual(len(notes), 1)
+        self.assertIn("Kings' Rest (3)", notes[0])
+        self.assertIn("Temple of Sethraliss (1)", notes[0])
+
+    def test_the_gear_page_shows_the_tier_set_with_its_bonuses(self):
+        self.boot()
+        self.lua.execute(self.TIERSET)
+        self.open_window()
+        tab = self.page_button("Gear")
+        tab.scripts.OnClick(tab)
+        texts = self.shown_texts()
+        self.assertTrue(any("Radiance of the Consecrated Flame" in t for t in texts))
+        self.assertTrue(any("(2)" in t and "Consecration is larger." in t for t in texts))
+        # no German text for the 4-piece bonus: the English one stands in (the stub's locale is English anyway)
+        self.assertTrue(any("(4)" in t and "Enemies take more damage." in t for t in texts))
+        self.lua.execute("KeyLootMasterTierSet = nil")
+        self.g.SlashCmdList["KEYLOOTMASTER"]("")
+        self.g.SlashCmdList["KEYLOOTMASTER"]("")
+        self.assertFalse(any("Radiance of the Consecrated Flame" in t for t in self.shown_texts()))
+
     def test_the_farming_page_reads_overall_as_mythic_plus_and_says_so_without_data(self):
         ns = self.boot()
         self.g.KeyLootMasterDB.content = "overall"
